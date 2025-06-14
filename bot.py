@@ -1,71 +1,122 @@
-from aiogram import Bot, Dispatcher, executor, types
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 import logging
-import os
+from aiogram import Bot, Dispatcher, executor, types
+from aiogram.dispatcher import FSMContext
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram.dispatcher.filters.state import State, StatesGroup
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 
-API_TOKEN = os.getenv("BOT_TOKEN")
-admin_chat_id = 123456789  # <-- Bu yerga admin Telegram ID ni yozing
+# ✅ Token va adminlar
+API_TOKEN = '7847841979:AAHiQPRZSvqXronN4UlVX37dVel3aOo6fL0'
+ADMIN_IDS = [5619056094, 5444347783]  # << Ikkita admin Telegram ID
 
+# Logging
 logging.basicConfig(level=logging.INFO)
-bot = Bot(token=API_TOKEN)
-dp = Dispatcher(bot)
 
+# Bot va Dispatcher
+bot = Bot(token=API_TOKEN)
+storage = MemoryStorage()
+dp = Dispatcher(bot, storage=storage)
+
+# Holatlar
+class OrderBook(StatesGroup):
+    phone = State()
+    fullname = State()
+    region = State()
+    payment = State()
+
+# Start menyu
 start_menu = ReplyKeyboardMarkup(resize_keyboard=True)
 start_menu.add(KeyboardButton("📦 Buyurtma berish"))
 
-phone_request_kb = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-phone_request_kb.add(KeyboardButton("📱 Raqamni ulashish", request_contact=True))
+# Restart menyu (buyurtma tugaganda)
+restart_menu = ReplyKeyboardMarkup(resize_keyboard=True)
+restart_menu.add(KeyboardButton("/start"))
 
-regions_kb = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+# Telefon uchun tugma
+phone_kb = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+phone_kb.add(KeyboardButton("📱 Raqamni yuborish", request_contact=True))
+
+# Viloyatlar
 regions = ["Toshkent", "Andijon", "Farg‘ona", "Namangan", "Buxoro", "Jizzax",
            "Samarqand", "Surxondaryo", "Qashqadaryo", "Navoiy", "Xorazm", "Sirdaryo"]
+
+region_kb = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
 for r in regions:
-    regions_kb.add(KeyboardButton(r))
+    region_kb.add(KeyboardButton(r))
 
-# Global foydalanuvchi ma'lumotlarini saqlash uchun
-user_data = {}
-
+# /start komandasi
 @dp.message_handler(commands=['start'])
-async def start(msg: types.Message):
-    await msg.answer("📚 Salom! Kitob botiga xush kelibsiz. Quyidagidan tanlang:", reply_markup=start_menu)
+async def start(message: types.Message):
+    await message.answer("📚 Kitob sotuv bo'lim botiga xush kelibsiz!", reply_markup=start_menu)
 
+# Buyurtma bosilganda
 @dp.message_handler(lambda msg: msg.text == "📦 Buyurtma berish")
-async def ask_phone(msg: types.Message):
-    user_data[msg.from_user.id] = {}
-    await msg.answer("Iltimos, telefon raqamingizni ulashing 👇", reply_markup=phone_request_kb)
+async def ask_phone(message: types.Message):
+    await message.answer("📱 Iltimos, telefon raqamingizni ulashing:", reply_markup=phone_kb)
+    await OrderBook.phone.set()
 
-@dp.message_handler(content_types=['contact'])
-async def ask_name(msg: types.Message):
-    user_data[msg.from_user.id]['phone'] = msg.contact.phone_number
-    await msg.answer("Rahmat! Endi ismingiz va familiyangizni yozing:")
+# Telefon raqam kelganda
+@dp.message_handler(content_types=types.ContentType.CONTACT, state=OrderBook.phone)
+async def receive_contact(message: types.Message, state: FSMContext):
+    phone_number = message.contact.phone_number
+    await state.update_data(phone=phone_number)
+    await message.answer("👤 Ismingiz va familiyangizni kiriting:", reply_markup=ReplyKeyboardRemove())
+    await OrderBook.fullname.set()
 
-@dp.message_handler(lambda msg: msg.text in regions)
-async def ask_payment(msg: types.Message):
-    user_data[msg.from_user.id]['region'] = msg.text
-    await msg.answer(
-        "💳 To‘lov uchun karta raqami: 8600 1234 5678 9012\n"
-        "💰 Narxi: 59,000 so‘m\n\n"
-        "Iltimos, to‘lovni amalga oshiring va chek (rasm)ni yuboring:"
+# FIO yozilganda
+@dp.message_handler(state=OrderBook.fullname)
+async def receive_fullname(message: types.Message, state: FSMContext):
+    await state.update_data(fullname=message.text)
+    await message.answer("📍 Yashayotgan viloyatingizni tanlang:", reply_markup=region_kb)
+    await OrderBook.region.set()
+
+# Viloyat tanlanganda
+@dp.message_handler(state=OrderBook.region)
+async def receive_region(message: types.Message, state: FSMContext):
+    if message.text not in regions:
+        return await message.answer("❗️ Iltimos, viloyat ro'yxatidan tanlang.")
+
+    await state.update_data(region=message.text)
+    await message.answer(
+        "💳 To‘lov rekvizitlari:\n\n"
+        "<b>Karta:</b> <code>8600 XXXX XXXX XXXX</code>\n"
+        "<b>Narxi:</b> <b>59 000 so‘m</b>\n\n"
+        "✅ To‘lovni amalga oshirgach, chekni rasm sifatida yuboring.",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardRemove()
     )
+    await OrderBook.payment.set()
 
-@dp.message_handler(lambda msg: msg.text and 'phone' in user_data.get(msg.from_user.id, {}))
-async def get_region(msg: types.Message):
-    user_data[msg.from_user.id]['name'] = msg.text
-    await msg.answer("Endi yashash viloyatingizni tanlang:", reply_markup=regions_kb)
-
-@dp.message_handler(content_types=['photo'])
-async def confirm_payment(msg: types.Message):
-    await msg.answer("✅ Chekingiz 24 soat ichida ko‘rib chiqiladi. Rahmat!")
-
-    data = user_data.get(msg.from_user.id, {})
+# Chek rasmi yuborilganda
+@dp.message_handler(content_types=types.ContentType.PHOTO, state=OrderBook.payment)
+async def receive_payment(message: types.Message, state: FSMContext):
+    data = await state.get_data()
     caption = (
-        "🆕 Yangi buyurtma!\n\n"
-        f"👤 Ism: {data.get('name', 'Noma’lum')}\n"
-        f"📞 Telefon: {data.get('phone', 'Noma’lum')}\n"
-        f"📍 Viloyat: {data.get('region', 'Noma’lum')}\n"
-        f"📸 Quyida to‘lov cheki ilova qilingan."
+        "📥 <b>Yangi buyurtma:</b>\n\n"
+        f"📞 <b>Telefon:</b> {data.get('phone')}\n"
+        f"👤 <b>Ism:</b> {data.get('fullname')}\n"
+        f"📍 <b>Viloyat:</b> {data.get('region')}\n\n"
+        f"🧾 <i>Quyida chek rasmi:</i>"
     )
 
-    photo = msg.photo[-1].file_id
-    await bot.send_photo(admin_chat_id, photo=photo, caption=caption)
+    for admin_id in ADMIN_IDS:
+        await bot.send_photo(chat_id=admin_id, photo=message.photo[-1].file_id, caption=caption, parse_mode="HTML")
 
+    await message.answer(
+        "✅ Chekingiz qabul qilindi!\n"
+        "⏰ 24 soat ichida ko‘rib chiqiladi va yetkazib beriladi.\n"
+        "🛍  Xaridingiz uchun rahmat!\n\n"
+        "🔁 Yana buyurtma berish uchun pastdagi /start tugmasini bosing.",
+        reply_markup=restart_menu,
+        parse_mode="HTML"
+    )
+    await state.finish()
+
+# Rasm o‘rniga boshqa narsa yuborilsa
+@dp.message_handler(state=OrderBook.payment)
+async def wrong_payment_format(message: types.Message):
+    await message.answer("❌ Iltimos, chekni *rasm* sifatida yuboring.", parse_mode="Markdown")
+
+# Botni ishga tushurish
+if __name__ == '__main__':
+    executor.start_polling(dp, skip_updates=True)
