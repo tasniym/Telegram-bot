@@ -1,8 +1,9 @@
-# Telegram Check Bot
+# Telegram Buyurtma Bot
 
-## Ishga tushirish
+📚 Bu bot foydalanuvchilardan buyurtma olish uchun ishlab chiqilgan. Chekni yuborgan foydalanuvchi haqida ma'lumot adminlarga boradi.
 
-1. `.env` fayl yarating:
-```env
-BOT_TOKEN=7847841979:AAHiQPRZSvqXronN4UlVX37dVel3aOo6fL0
-ADMIN_ID=5444347783
+## Boshlash:
+
+```bash
+pip install -r requirements.txt
+python3 main.py
