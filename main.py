@@ -32,7 +32,7 @@ bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 
-# --- Holatlar (FSM)
+# --- FSM Holatlar
 class OrderBook(StatesGroup):
     phone = State()
     fullname = State()
@@ -50,23 +50,22 @@ region_kb = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
 for r in regions:
     region_kb.add(KeyboardButton(r))
 
-# ✅ 1. Reklama va linklarni bloklovchi filter
+# ✅ Reklama bloklash
 SPAM_WORDS = ["1xbet", "aviator", "kazino", "stavka", "https://", "http://", "pul ishlash"]
-
 @dp.message_handler(lambda msg: any(word in msg.text.lower() for word in SPAM_WORDS), content_types=types.ContentType.TEXT)
 async def block_spam(message: types.Message):
     await message.reply("🚫 Botda reklama va havolalar tarqatish taqiqlangan!")
     await message.delete()
 
-# ✅ 2. /start bosmasdan boshqa tugmalarni bloklash
+# ✅ /start bosmasdan ishlashni bloklash
 @dp.message_handler(state=None)
-async def enforce_start(message: types.Message):
+async def check_start(message: types.Message):
     if message.text != "/start":
         await message.reply("❗️Iltimos, avval /start buyrug'ini yuboring.")
 
-# --- Bot handlers
+# --- Bot Handlers
 @dp.message_handler(commands=['start'])
-async def start(message: types.Message):
+async def cmd_start(message: types.Message):
     await message.answer("📚 Kitob sotuv bo'lim botiga xush kelibsiz!", reply_markup=start_menu)
 
 @dp.message_handler(lambda msg: msg.text == "📦 Buyurtma berish")
@@ -125,10 +124,10 @@ async def receive_payment(message: types.Message, state: FSMContext):
     await state.finish()
 
 @dp.message_handler(state=OrderBook.payment)
-async def wrong_payment_format(message: types.Message):
+async def wrong_payment(message: types.Message):
     await message.answer("❌ Iltimos, chekni *rasm* sifatida yuboring.", parse_mode="Markdown")
 
-# --- Bot va Flask ni parallel ishlatish
+# --- Flask + Bot parallel
 def start_bot():
     asyncio.run(executor.start_polling(dp, skip_updates=True))
 
