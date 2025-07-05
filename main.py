@@ -11,7 +11,7 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 
 # --- TOKEN & ADMIN IDs
-API_TOKEN ="7847841979:AAHiQPRZSvqXronN4UlVX37dVel3aOo6fL0"
+API_TOKEN = "7847841979:AAHiQPRZSvqXronN4UlVX37dVel3aOo6fL0"
 ADMIN_IDS = [5619056094, 5444347783]
 
 # --- LOGGING
@@ -32,6 +32,7 @@ bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 
+# --- Holatlar (FSM)
 class OrderBook(StatesGroup):
     phone = State()
     fullname = State()
@@ -79,7 +80,7 @@ async def receive_region(message: types.Message, state: FSMContext):
     await message.answer(
         "💳 To‘lov rekvizitlari:\n\n"
         "<b>Karta:</b> <code>8600 1404 4188 5630</code>\n"
-        "<b>Narxi:</b> <b>Ulug'bek Mullabayev</b>\n\n"
+        "<b>Ism:</b> <b>Ulug'bek Mullabayev</b>\n"
         "<b>Narxi:</b> <b>59 000 so‘m</b>\n\n"
         "✅ To‘lovni amalga oshirgach, chekni rasm sifatida yuboring.",
         parse_mode="HTML"
@@ -103,7 +104,7 @@ async def receive_payment(message: types.Message, state: FSMContext):
         "✅ Chekingiz qabul qilindi!\n"
         "⏰ 24 soat ichida ko‘rib chiqiladi va yetkazib beriladi.\n"
         "🛍 Xaridingiz uchun rahmat!\n\n"
-        "🔁 Yana buyurtma berish uchun pastdagi /start tugmasini bosing.",
+        "🔁 Yana buyurtma berish uchun /start tugmasini bosing.",
         reply_markup=restart_menu,
         parse_mode="HTML"
     )
@@ -118,9 +119,6 @@ def start_bot():
     asyncio.run(executor.start_polling(dp, skip_updates=True))
 
 if __name__ == "__main__":
-    # Flask serverni thread’da ishga tushiramiz
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.start()
-
-    # Botni ishga tushiramiz
     start_bot()
