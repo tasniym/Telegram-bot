@@ -50,6 +50,20 @@ region_kb = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
 for r in regions:
     region_kb.add(KeyboardButton(r))
 
+# ✅ 1. Reklama va linklarni bloklovchi filter
+SPAM_WORDS = ["1xbet", "aviator", "kazino", "stavka", "https://", "http://", "pul ishlash"]
+
+@dp.message_handler(lambda msg: any(word in msg.text.lower() for word in SPAM_WORDS), content_types=types.ContentType.TEXT)
+async def block_spam(message: types.Message):
+    await message.reply("🚫 Botda reklama va havolalar tarqatish taqiqlangan!")
+    await message.delete()
+
+# ✅ 2. /start bosmasdan boshqa tugmalarni bloklash
+@dp.message_handler(state=None)
+async def enforce_start(message: types.Message):
+    if message.text != "/start":
+        await message.reply("❗️Iltimos, avval /start buyrug'ini yuboring.")
+
 # --- Bot handlers
 @dp.message_handler(commands=['start'])
 async def start(message: types.Message):
