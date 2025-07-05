@@ -1,5 +1,6 @@
 import logging
 import os
+from dotenv import load_dotenv
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.dispatcher import FSMContext
@@ -9,9 +10,22 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemo
 from aiogram.utils.executor import start_webhook
 from flask import Flask
 
+# .env fayldan o'qish
+load_dotenv()
+
 # TOKEN & ADMIN IDs
-API_TOKEN = os.getenv("7847841979:AAHiQPRZSvqXronN4UlVX37dVel3aOo6fL0")
-ADMIN_IDS = [5619056094, 5444347783]
+API_TOKEN = os.getenv("API_TOKEN")
+if not API_TOKEN:
+    raise ValueError("API_TOKEN .env faylda topilmadi!")
+
+admins_str = os.getenv("ADMIN_IDS", "")
+ADMIN_IDS = [int(admin.strip()) for admin in admins_str.split(",") if admin.strip()]
+
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+if not WEBHOOK_URL:
+    raise ValueError("WEBHOOK_URL .env faylda topilmadi!")
+
+PORT = int(os.getenv("PORT", 8080))
 
 # Logging
 logging.basicConfig(level=logging.INFO)
@@ -26,10 +40,10 @@ dp = Dispatcher(bot, storage=storage)
 
 # Webhook settings
 WEBHOOK_PATH = f"/webhook/{API_TOKEN}"
-WEBHOOK_URL = os.getenv("WEBHOOK_URL") + WEBHOOK_PATH
+WEBHOOK_URL_FULL = WEBHOOK_URL + WEBHOOK_PATH
 
 WEBAPP_HOST = "0.0.0.0"
-WEBAPP_PORT = int(os.getenv("PORT", default=8080))
+WEBAPP_PORT = PORT
 
 # FSM states
 class OrderBook(StatesGroup):
@@ -114,7 +128,7 @@ async def wrong_payment_format(message: types.Message):
 
 # Webhook setup
 async def on_startup(dp):
-    await bot.set_webhook(WEBHOOK_URL)
+    await bot.set_webhook(WEBHOOK_URL_FULL)
 
 async def on_shutdown(dp):
     await bot.delete_webhook()
