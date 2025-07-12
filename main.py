@@ -6,7 +6,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.dispatcher import FSMContext
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.utils.executor import start_webhook
 from flask import Flask
 
@@ -107,6 +107,16 @@ async def receive_region(message: types.Message, state: FSMContext):
     )
     await OrderBook.payment.set()
 
+# 🔘 Inline tugmalar yaratish
+def confirm_buttons(user_id: int):
+    buttons = InlineKeyboardMarkup(row_width=2)
+    buttons.add(
+        InlineKeyboardButton("✅ Tasdiqlansin", callback_data=f"confirm_{user_id}"),
+        InlineKeyboardButton("❌ Rad etilsin", callback_data=f"reject_{user_id}")
+    )
+    return buttons
+
+# ✅ Chek qabul qilish + adminlarga yuborish
 @dp.message_handler(content_types=types.ContentType.PHOTO, state=OrderBook.payment)
 async def receive_payment(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -118,13 +128,37 @@ async def receive_payment(message: types.Message, state: FSMContext):
         f"🧾 Chek quyida:"
     )
     for admin in ADMIN_IDS:
-        await bot.send_photo(chat_id=admin, photo=message.photo[-1].file_id, caption=caption, parse_mode="HTML")
+        await bot.send_photo(
+            chat_id=admin,
+            photo=message.photo[-1].file_id,
+            caption=caption,
+            parse_mode="HTML",
+            reply_markup=confirm_buttons(user_id=message.from_user.id)
+        )
     await message.answer("✅ Chek qabul qilindi. Tez orada bog‘lanamiz.", reply_markup=restart_menu)
     await state.finish()
 
+# ❗ Rasm o‘rniga boshqa formatda yuborsa
 @dp.message_handler(state=OrderBook.payment)
 async def wrong_payment_format(message: types.Message):
     await message.answer("❌ Chekni *rasm* sifatida yuboring.", parse_mode="Markdown")
+
+# 🔘 Admin tasdiqlash yoki rad etish tugmalari callback
+@dp.callback_query_handler(lambda c: c.data.startswith("confirm_") or c.data.startswith("reject_"))
+async def handle_admin_response(callback_query: CallbackQuery):
+    action, user_id_str = callback_query.data.split("_")
+    user_id = int(user_id_str)
+
+    if action == "confirm":
+        text = "✅ Chekingiz muvaffaqiyatli tekshirildi. Tez orada yetkazib beramiz!"
+    else:
+        text = "❌ Afsuski, zakazingiz rad etildi. Iltimos, to‘lovni to‘g‘ri amalga oshirganingizga ishonch hosil qiling."
+
+    try:
+        await bot.send_message(chat_id=user_id, text=text)
+        await callback_query.answer("✅ Foydalanuvchiga xabar yuborildi.")
+    except Exception as e:
+        await callback_query.answer("❗ Foydalanuvchiga yozib bo‘lmadi.", show_alert=True)
 
 # Webhook setup
 async def on_startup(dp):
