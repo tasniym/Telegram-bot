@@ -108,12 +108,12 @@ async def receive_region(message: types.Message, state: FSMContext):
 
 # Inline tugmalar
 def confirm_buttons(user_id: int):
-    buttons = InlineKeyboardMarkup(row_width=2)
-    buttons.add(
-        InlineKeyboardButton("✅ Tasdiqlansin", callback_data=f"confirm_{user_id}"),
-        InlineKeyboardButton("❌ Rad etilsin", callback_data=f"reject_{user_id}")
-    )
-    return buttons
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton("✅ Tasdiqlansin", callback_data=f"action:confirm:{user_id}"),
+            InlineKeyboardButton("❌ Rad etilsin", callback_data=f"action:reject:{user_id}")
+        ]
+    ])
 
 @dp.message_handler(content_types=types.ContentType.PHOTO, state=OrderBook.payment)
 async def receive_payment(message: types.Message, state: FSMContext):
@@ -145,13 +145,13 @@ async def receive_payment(message: types.Message, state: FSMContext):
 async def wrong_payment_format(message: types.Message):
     await message.answer("❌ Chekni *rasm* sifatida yuboring.", parse_mode="Markdown")
 
-@dp.callback_query_handler(lambda c: c.data.startswith("confirm_") or c.data.startswith("reject_"))
+@dp.callback_query_handler(lambda c: c.data.startswith("action:"))
 async def handle_admin_response(callback_query: CallbackQuery):
-    action, user_id_str = callback_query.data.split("_", 1)
     try:
+        _, action, user_id_str = callback_query.data.split(":")
         user_id = int(user_id_str)
-    except ValueError:
-        await callback_query.answer("❗ User ID noto‘g‘ri!", show_alert=True)
+    except Exception as e:
+        await callback_query.answer("❗ Callback data xato formatda!", show_alert=True)
         return
 
     if action == "confirm":
