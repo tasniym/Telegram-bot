@@ -10,10 +10,9 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemo
 from aiogram.utils.executor import start_webhook
 from flask import Flask
 
-# .env fayldan o'qish
+# .env fayldan o‘qish
 load_dotenv()
 
-# TOKEN & ADMIN IDs
 API_TOKEN = os.getenv("API_TOKEN")
 if not API_TOKEN:
     raise ValueError("API_TOKEN .env faylda topilmadi!")
@@ -33,7 +32,7 @@ logging.basicConfig(level=logging.INFO)
 # Flask app
 app = Flask(__name__)
 
-# Aiogram
+# Aiogram setup
 bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
@@ -45,7 +44,7 @@ WEBHOOK_URL_FULL = WEBHOOK_URL + WEBHOOK_PATH
 WEBAPP_HOST = "0.0.0.0"
 WEBAPP_PORT = PORT
 
-# FSM states
+# FSM States
 class OrderBook(StatesGroup):
     phone = State()
     fullname = State()
@@ -63,7 +62,7 @@ region_kb = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
 for r in regions:
     region_kb.add(KeyboardButton(r))
 
-# Filters
+# SPAM filters
 SPAM_WORDS = ["1xbet", "aviator", "kazino", "stavka", "https://", "http://", "pul ishlash"]
 
 @dp.message_handler(lambda msg: any(word in msg.text.lower() for word in SPAM_WORDS), content_types=types.ContentType.TEXT)
@@ -82,7 +81,7 @@ async def ask_phone(message: types.Message):
 
 @dp.message_handler(content_types=types.ContentType.CONTACT, state=OrderBook.phone)
 async def receive_contact(message: types.Message, state: FSMContext):
-    await state.update_data(phone=message.contact.phone_number)
+    await state.update_data(phone=message.contact.phone_number, user_id=message.from_user.id)
     await message.answer("👤 Ismingizni kiriting:", reply_markup=ReplyKeyboardRemove())
     await OrderBook.fullname.set()
 
@@ -107,7 +106,7 @@ async def receive_region(message: types.Message, state: FSMContext):
     )
     await OrderBook.payment.set()
 
-# 🔘 Inline tugmalar yaratish
+# Inline tugmalar
 def confirm_buttons(user_id: int):
     buttons = InlineKeyboardMarkup(row_width=2)
     buttons.add(
@@ -116,10 +115,11 @@ def confirm_buttons(user_id: int):
     )
     return buttons
 
-# ✅ Chek qabul qilish + adminlarga yuborish
 @dp.message_handler(content_types=types.ContentType.PHOTO, state=OrderBook.payment)
 async def receive_payment(message: types.Message, state: FSMContext):
+    await state.update_data(user_id=message.from_user.id)
     data = await state.get_data()
+
     caption = (
         f"📥 Yangi buyurtma:\n\n"
         f"📞 Telefon: {data.get('phone')}\n"
@@ -127,27 +127,32 @@ async def receive_payment(message: types.Message, state: FSMContext):
         f"📍 Viloyat: {data.get('region')}\n\n"
         f"🧾 Chek quyida:"
     )
+    user_id = data.get('user_id')
+
     for admin in ADMIN_IDS:
         await bot.send_photo(
             chat_id=admin,
             photo=message.photo[-1].file_id,
             caption=caption,
             parse_mode="HTML",
-            reply_markup=confirm_buttons(user_id=message.from_user.id)
+            reply_markup=confirm_buttons(user_id=user_id)
         )
+
     await message.answer("✅ Chek qabul qilindi. Tez orada bog‘lanamiz.", reply_markup=restart_menu)
     await state.finish()
 
-# ❗ Rasm o‘rniga boshqa formatda yuborsa
 @dp.message_handler(state=OrderBook.payment)
 async def wrong_payment_format(message: types.Message):
     await message.answer("❌ Chekni *rasm* sifatida yuboring.", parse_mode="Markdown")
 
-# 🔘 Admin tasdiqlash yoki rad etish tugmalari callback
 @dp.callback_query_handler(lambda c: c.data.startswith("confirm_") or c.data.startswith("reject_"))
 async def handle_admin_response(callback_query: CallbackQuery):
-    action, user_id_str = callback_query.data.split("_")
-    user_id = int(user_id_str)
+    action, user_id_str = callback_query.data.split("_", 1)
+    try:
+        user_id = int(user_id_str)
+    except ValueError:
+        await callback_query.answer("❗ User ID noto‘g‘ri!", show_alert=True)
+        return
 
     if action == "confirm":
         text = "✅ Chekingiz muvaffaqiyatli tekshirildi. Tez orada yetkazib beramiz!"
@@ -158,7 +163,8 @@ async def handle_admin_response(callback_query: CallbackQuery):
         await bot.send_message(chat_id=user_id, text=text)
         await callback_query.answer("✅ Foydalanuvchiga xabar yuborildi.")
     except Exception as e:
-        await callback_query.answer("❗ Foydalanuvchiga yozib bo‘lmadi.", show_alert=True)
+        logging.exception("Foydalanuvchiga yozib bo‘lmadi:")
+        await callback_query.answer("❗ Foydalanuvchiga xabar yuborib bo‘lmadi.", show_alert=True)
 
 # Webhook setup
 async def on_startup(dp):
@@ -167,7 +173,6 @@ async def on_startup(dp):
 async def on_shutdown(dp):
     await bot.delete_webhook()
 
-# Run webhook
 if __name__ == '__main__':
     start_webhook(
         dispatcher=dp,
