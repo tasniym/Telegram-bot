@@ -1,7 +1,6 @@
 import logging
 import os
 from dotenv import load_dotenv
-from datetime import datetime
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.dispatcher import FSMContext
@@ -16,18 +15,21 @@ from flask import Flask
 
 # .env yuklash
 load_dotenv()
+
 API_TOKEN = os.getenv("API_TOKEN")
 if not API_TOKEN:
     raise ValueError("API_TOKEN .env faylda topilmadi!")
 
 admins_str = os.getenv("ADMIN_IDS", "")
 ADMIN_IDS = [int(admin.strip()) for admin in admins_str.split(",") if admin.strip()]
+
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 if not WEBHOOK_URL:
     raise ValueError("WEBHOOK_URL .env faylda topilmadi!")
+
 PORT = int(os.getenv("PORT", 8080))
 
-# Flask va Aiogram
+# Flask va aiogram sozlash
 logging.basicConfig(level=logging.INFO)
 app = Flask(__name__)
 bot = Bot(token=API_TOKEN)
@@ -38,9 +40,6 @@ WEBHOOK_PATH = f"/webhook/{API_TOKEN}"
 WEBHOOK_URL_FULL = WEBHOOK_URL + WEBHOOK_PATH
 WEBAPP_HOST = "0.0.0.0"
 WEBAPP_PORT = PORT
-
-# Global dict foydalanuvchining regionini saqlash uchun
-user_regions = {}
 
 # Holatlar
 class OrderBook(StatesGroup):
@@ -60,6 +59,7 @@ region_kb = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
 for r in regions:
     region_kb.add(KeyboardButton(r))
 
+# SPAM filtr
 SPAM_WORDS = ["1xbet", "aviator", "kazino", "stavka", "https://", "http://", "pul ishlash"]
 
 @dp.message_handler(lambda msg: any(word in msg.text.lower() for word in SPAM_WORDS), content_types=types.ContentType.TEXT)
@@ -67,7 +67,6 @@ async def block_spam(message: types.Message):
     await message.reply("🚫 Reklama taqiqlangan!")
     await message.delete()
 
-# Start
 @dp.message_handler(commands=['start'])
 async def start(message: types.Message):
     await message.answer("📚 Kitob botiga xush kelibsiz!", reply_markup=start_menu)
@@ -93,10 +92,7 @@ async def receive_fullname(message: types.Message, state: FSMContext):
 async def receive_region(message: types.Message, state: FSMContext):
     if message.text not in regions:
         return await message.answer("❗️ Ro‘yxatdan tanlang.")
-    
     await state.update_data(region=message.text)
-    user_regions[message.from_user.id] = message.text  # saqlaymiz
-
     await message.answer(
         "💳 To‘lov ma'lumotlari:\n\n"
         "<b>Karta:</b> <code>8600 1404 4188 5630</code>\n"
@@ -107,6 +103,7 @@ async def receive_region(message: types.Message, state: FSMContext):
     )
     await OrderBook.payment.set()
 
+# Inline tugmalar
 def confirm_buttons(user_id: int):
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton("✅ Tasdiqlansin", callback_data=f"action:confirm:{user_id}"),
@@ -139,14 +136,14 @@ async def receive_payment(message: types.Message, state: FSMContext):
     region = data.get("region")
     if region == "Namangan":
         await message.answer(
-            "✅ Chekingiz qabul qilindi. 24 soat ichida adminlarimiz tomonidan tekshirib chiqiladi.\n\n"
-            "📣 Yana sotib olishni istasangiz pastdagi /start tugmasini bosing.",
+            "✅ Chekingiz 24 soat ichida adminlarimiz tomonidan tekshirib chiqiladi.\n\n"
+            "🔊 Yana sotib olishni istasangiz pastdagi /start tugmasini bosing.",
             reply_markup=restart_menu
         )
     else:
         await message.answer(
             "✅ To‘lovingiz qabul qilindi. 24 soat ichida adminlarimiz tomonidan tekshirib chiqiladi va 7 ish kuni ichida belgilangan BTS pochtasiga yetkazib beriladi.\n\n"
-            "📣 Yana qayta sotib olishni istasangiz pastdagi /start tugmasini bosing.",
+            "🔊 Yana qayta sotib olishni istasangiz pastdagi /start tugmasini bosing.",
             reply_markup=restart_menu
         )
 
@@ -165,11 +162,12 @@ async def handle_admin_response(callback_query: CallbackQuery):
         await callback_query.answer("❗ Callback data xato formatda!", show_alert=True)
         return
 
+    user_data = await dp.storage.get_data(chat=None, user=user_id)
+    region = user_data.get("region", "")
+
     if action == "confirm":
         await bot.send_message(chat_id=user_id, text="✅ Chekingiz muvaffaqiyatli tekshirildi. Tez orada yetkazib beramiz!")
 
-        # Region bo‘yicha tekshirish
-        region = user_regions.get(user_id)
         if region == "Namangan":
             await bot.send_location(chat_id=user_id, latitude=41.00822673051774, longitude=71.64066054734141)
 
@@ -186,7 +184,6 @@ async def handle_admin_response(callback_query: CallbackQuery):
                             "⏰ Zakazni olib ketish vaqti: Dushanbadan Jumagacha, 09:00 – 18:00 gacha"
                         )
                     )
-
             await bot.send_message(chat_id=user_id, text="📞 Biz bilan bog‘lanish: +998 90 797 76 67")
     else:
         await bot.send_message(
