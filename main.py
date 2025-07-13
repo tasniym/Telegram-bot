@@ -141,6 +141,7 @@ async def receive_payment(message: types.Message, state: FSMContext):
     if region == "Namangan":
         await message.answer(
             "✅ Chekingiz 24 soat ichida adminlarimiz tomonidan tekshirib chiqiladi.\n\n"
+            "📦 Buyurtmangiz tekshirib chiqilgandan so'ng Adminlarimizdan biri sizga aloqaga chiqadi keyin zakazingizni O'quv markazimizga kelib olib ketishingiz mumkin bo'ladi."
             "🔊 Yana sotib olishni istasangiz pastdagi /start tugmasini bosing.",
             reply_markup=restart_menu
         )
