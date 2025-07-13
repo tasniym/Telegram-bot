@@ -41,6 +41,9 @@ WEBHOOK_URL_FULL = WEBHOOK_URL + WEBHOOK_PATH
 WEBAPP_HOST = "0.0.0.0"
 WEBAPP_PORT = PORT
 
+# Buyurtma ma'lumotlarini vaqtincha saqlash uchun
+user_orders = {}
+
 # Holatlar
 class OrderBook(StatesGroup):
     phone = State()
@@ -103,7 +106,6 @@ async def receive_region(message: types.Message, state: FSMContext):
     )
     await OrderBook.payment.set()
 
-# Inline tugmalar
 def confirm_buttons(user_id: int):
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton("✅ Tasdiqlansin", callback_data=f"action:confirm:{user_id}"),
@@ -115,6 +117,8 @@ async def receive_payment(message: types.Message, state: FSMContext):
     await state.update_data(user_id=message.from_user.id)
     data = await state.get_data()
 
+    user_orders[message.from_user.id] = data  # Ma'lumotlarni saqlash
+
     caption = (
         f"📅 Yangi buyurtma:\n\n"
         f"📞 Telefon: {data.get('phone')}\n"
@@ -122,7 +126,7 @@ async def receive_payment(message: types.Message, state: FSMContext):
         f"📍 Viloyat: {data.get('region')}\n\n"
         f"🗾 Chek quyida:"
     )
-    user_id = data.get('user_id')
+    user_id = message.from_user.id
 
     for admin in ADMIN_IDS:
         await bot.send_photo(
@@ -162,8 +166,13 @@ async def handle_admin_response(callback_query: CallbackQuery):
         await callback_query.answer("❗ Callback data xato formatda!", show_alert=True)
         return
 
-    user_data = await dp.storage.get_data(chat=None, user=user_id)
-    region = user_data.get("region", "")
+    data = user_orders.get(user_id)
+
+    if not data:
+        await callback_query.answer("❗ Ma’lumotlar topilmadi!", show_alert=True)
+        return
+
+    region = data.get("region", "")
 
     if action == "confirm":
         await bot.send_message(chat_id=user_id, text="✅ Chekingiz muvaffaqiyatli tekshirildi. Tez orada yetkazib beramiz!")
@@ -185,6 +194,7 @@ async def handle_admin_response(callback_query: CallbackQuery):
                         )
                     )
             await bot.send_message(chat_id=user_id, text="📞 Biz bilan bog‘lanish: +998 90 797 76 67")
+
     else:
         await bot.send_message(
             chat_id=user_id,
