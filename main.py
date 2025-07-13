@@ -108,12 +108,10 @@ async def receive_region(message: types.Message, state: FSMContext):
 
 # Inline tugmalar
 def confirm_buttons(user_id: int):
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton("✅ Tasdiqlansin", callback_data=f"action:confirm:{user_id}"),
-            InlineKeyboardButton("❌ Rad etilsin", callback_data=f"action:reject:{user_id}")
-        ]
-    ])
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton("✅ Tasdiqlansin", callback_data=f"action:confirm:{user_id}"),
+        InlineKeyboardButton("❌ Rad etilsin", callback_data=f"action:reject:{user_id}")
+    ]])
 
 @dp.message_handler(content_types=types.ContentType.PHOTO, state=OrderBook.payment)
 async def receive_payment(message: types.Message, state: FSMContext):
@@ -145,12 +143,13 @@ async def receive_payment(message: types.Message, state: FSMContext):
 async def wrong_payment_format(message: types.Message):
     await message.answer("❌ Chekni *rasm* sifatida yuboring.", parse_mode="Markdown")
 
+# ✅ Tugmalarni ishlatuvchi handler
 @dp.callback_query_handler(lambda c: c.data.startswith("action:"))
 async def handle_admin_response(callback_query: CallbackQuery):
     try:
         _, action, user_id_str = callback_query.data.split(":")
         user_id = int(user_id_str)
-    except Exception as e:
+    except Exception:
         await callback_query.answer("❗ Callback data xato formatda!", show_alert=True)
         return
 
