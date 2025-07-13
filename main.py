@@ -67,7 +67,7 @@ SPAM_WORDS = ["1xbet", "aviator", "kazino", "stavka", "https://", "http://", "pu
 
 @dp.message_handler(lambda msg: any(word in msg.text.lower() for word in SPAM_WORDS), content_types=types.ContentType.TEXT)
 async def block_spam(message: types.Message):
-    await message.reply("🚫 Reklama taqiqlangan!")
+    await message.reply("🛘 Reklama taqiqlangan!")
     await message.delete()
 
 @dp.message_handler(commands=['start'])
@@ -96,6 +96,18 @@ async def receive_region(message: types.Message, state: FSMContext):
     if message.text not in regions:
         return await message.answer("❗️ Ro‘yxatdan tanlang.")
     await state.update_data(region=message.text)
+
+    if message.text == "Namangan":
+        # Lokatsiya
+        await bot.send_location(chat_id=message.from_user.id, latitude=40.9982, longitude=71.6726)
+        # Rasm
+        photo_path = os.path.join("assets", "vinder_logo.jpg")
+        if os.path.exists(photo_path):
+            with open(photo_path, 'rb') as photo:
+                await bot.send_photo(chat_id=message.from_user.id, photo=photo, caption="📍 Namangan o‘quv markazi")
+        # Telefon
+        await bot.send_message(chat_id=message.from_user.id, text="📞 Biz bilan bog‘lanish: +998 90 797 76 67")
+
     await message.answer(
         "💳 To‘lov ma'lumotlari:\n\n"
         "<b>Karta:</b> <code>8600 1404 4188 5630</code>\n"
@@ -119,11 +131,11 @@ async def receive_payment(message: types.Message, state: FSMContext):
     data = await state.get_data()
 
     caption = (
-        f"📥 Yangi buyurtma:\n\n"
+        f"📅 Yangi buyurtma:\n\n"
         f"📞 Telefon: {data.get('phone')}\n"
         f"👤 Ism: {data.get('fullname')}\n"
         f"📍 Viloyat: {data.get('region')}\n\n"
-        f"🧾 Chek quyida:"
+        f"🗾 Chek quyida:"
     )
     user_id = data.get('user_id')
 
@@ -143,7 +155,6 @@ async def receive_payment(message: types.Message, state: FSMContext):
 async def wrong_payment_format(message: types.Message):
     await message.answer("❌ Chekni *rasm* sifatida yuboring.", parse_mode="Markdown")
 
-# ✅ Tugmalarni ishlatuvchi handler
 @dp.callback_query_handler(lambda c: c.data.startswith("action:"))
 async def handle_admin_response(callback_query: CallbackQuery):
     try:
