@@ -1,6 +1,7 @@
 import logging
 import os
 from dotenv import load_dotenv
+from datetime import datetime
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.dispatcher import FSMContext
@@ -13,7 +14,7 @@ from aiogram.types import (
 from aiogram.utils.executor import start_webhook
 from flask import Flask
 
-# .env fayldan o‘qish
+# .env fayldan yuklash
 load_dotenv()
 
 API_TOKEN = os.getenv("API_TOKEN")
@@ -29,32 +30,27 @@ if not WEBHOOK_URL:
 
 PORT = int(os.getenv("PORT", 8080))
 
-# Logging
+# Flask va aiogram sozlash
 logging.basicConfig(level=logging.INFO)
-
-# Flask app
 app = Flask(__name__)
-
-# Aiogram setup
 bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 
-# Webhook settings
+# Webhook sozlamalar
 WEBHOOK_PATH = f"/webhook/{API_TOKEN}"
 WEBHOOK_URL_FULL = WEBHOOK_URL + WEBHOOK_PATH
-
 WEBAPP_HOST = "0.0.0.0"
 WEBAPP_PORT = PORT
 
-# FSM States
+# Bot holatlari
 class OrderBook(StatesGroup):
     phone = State()
     fullname = State()
     region = State()
     payment = State()
 
-# Keyboards
+# Klaviaturalar
 start_menu = ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton("📦 Buyurtma berish"))
 restart_menu = ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton("/start"))
 phone_kb = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True).add(
@@ -65,14 +61,15 @@ region_kb = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
 for r in regions:
     region_kb.add(KeyboardButton(r))
 
-# SPAM filters
+# SPAM filtr
 SPAM_WORDS = ["1xbet", "aviator", "kazino", "stavka", "https://", "http://", "pul ishlash"]
 
 @dp.message_handler(lambda msg: any(word in msg.text.lower() for word in SPAM_WORDS), content_types=types.ContentType.TEXT)
 async def block_spam(message: types.Message):
-    await message.reply("🛘 Reklama taqiqlangan!")
+    await message.reply("🚫 Reklama taqiqlangan!")
     await message.delete()
 
+# /start
 @dp.message_handler(commands=['start'])
 async def start(message: types.Message):
     await message.answer("📚 Kitob botiga xush kelibsiz!", reply_markup=start_menu)
@@ -140,37 +137,20 @@ async def receive_payment(message: types.Message, state: FSMContext):
             reply_markup=confirm_buttons(user_id=user_id)
         )
 
-    # Javob foydalanuvchiga:
-    if data.get("region") == "Namangan":
-        await bot.send_message(chat_id=message.from_user.id,
-            text="✅ Chekingiz qabul qilindi. 24 soat ichida adminlarimiz tomonidan tekshirib chiqiladi.")
-
-        # Lokatsiya
-        await bot.send_location(chat_id=message.from_user.id, latitude=41.00822673051774, longitude=71.64066054734141)
-
-        # Rasm + Tavsif
-        photo_path = os.path.join("assets", "vinder_photo.jpg")
-        if os.path.exists(photo_path):
-            with open(photo_path, "rb") as photo:
-                await bot.send_photo(
-                    chat_id=message.from_user.id,
-                    photo=photo,
-                    caption=(
-                        "🏫 Vinder School\n\n"
-                        "📍 O‘quv markaz binosi.\n"
-                        "Do‘stlikni asosiy chorraxasidan Promzona tomonga burilganda 1-chi chap tomondagi bino.\n"
-                        "⏰ Ish vaqti: Dushanbadan Jumagacha, 09:00 – 18:00"
-                    )
-                )
-        # Telefon
-        await bot.send_message(chat_id=message.from_user.id, text="📞 Biz bilan bog‘lanish: +998 90 797 76 67")
+    region = data.get("region")
+    if region == "Namangan":
+        await message.answer(
+            "✅ Chekingiz qabul qilindi. 24 soat ichida adminlarimiz tomonidan tekshirib chiqiladi.\n\n"
+            "Sotib olishni istasangiz /start tugmasini bosing.",
+            reply_markup=restart_menu
+        )
     else:
-        await bot.send_message(
-            chat_id=message.from_user.id,
-            text="✅ To‘lovingiz qabul qilindi. 24 soat ichida adminlar tomonidan tekshirib chiqiladi va 7 ish kuni ichida belgilangan BTS pochtasiga yetkazib beriladi."
+        await message.answer(
+            "✅ To‘lovingiz qabul qilindi. 24 soat ichida adminlarimiz tomonidan tekshirib chiqiladi va 7 ish kuni ichida belgilangan BTS pochtasiga yetkazib beriladi.\n\n"
+            "📣 Yana qayta sotib olishni istasangiz pastdagi /start tugmasini bosing.",
+            reply_markup=restart_menu
         )
 
-    await message.answer("✅ Chek qabul qilindi. Tez orada bog‘lanamiz.", reply_markup=restart_menu)
     await state.finish()
 
 @dp.message_handler(state=OrderBook.payment)
@@ -187,18 +167,37 @@ async def handle_admin_response(callback_query: CallbackQuery):
         return
 
     if action == "confirm":
-        text = "✅ Chekingiz muvaffaqiyatli tekshirildi. Tez orada yetkazib beramiz!"
+        await bot.send_message(chat_id=user_id, text="✅ Chekingiz muvaffaqiyatli tekshirildi. Tez orada yetkazib beramiz!")
+
+        # Namangan uchun qo‘shimcha ma’lumot
+        user_data = await dp.storage.get_data(chat=callback_query.from_user.id, user=user_id)
+        if user_data.get("region") == "Namangan":
+            await bot.send_location(chat_id=user_id, latitude=41.00822673051774, longitude=71.64066054734141)
+
+            photo_path = os.path.join("assets", "vinder_photo.jpg")
+            if os.path.exists(photo_path):
+                with open(photo_path, "rb") as photo:
+                    await bot.send_photo(
+                        chat_id=user_id,
+                        photo=photo,
+                        caption=(
+                            "🏫 Vinder School\n\n"
+                            "📍 O‘quv markaz binosi.\n"
+                            "Do‘stlikni asosiy chorraxasidan Promzona tomonga burilganda 1-chi chap tomondagi bino.\n"
+                            "⏰ Zakazni olib ketish vaqti: Dushanbadan Jumagacha, 09:00 – 18:00 gacha"
+                        )
+                    )
+
+            await bot.send_message(chat_id=user_id, text="📞 Biz bilan bog‘lanish: +998 90 797 76 67")
     else:
-        text = "❌ Afsuski, zakazingiz rad etildi. Iltimos, to‘lovni to‘g‘ri amalga oshirganingizga ishonch hosil qiling."
+        await bot.send_message(
+            chat_id=user_id,
+            text="❌ Afsuski, zakazingiz rad etildi. Iltimos, to‘lovni to‘g‘ri amalga oshirganingizga ishonch hosil qiling."
+        )
 
-    try:
-        await bot.send_message(chat_id=user_id, text=text)
-        await callback_query.answer("✅ Foydalanuvchiga xabar yuborildi.")
-    except Exception as e:
-        logging.exception("Foydalanuvchiga yozib bo‘lmadi:")
-        await callback_query.answer("❗ Foydalanuvchiga xabar yuborib bo‘lmadi.", show_alert=True)
+    await callback_query.answer("✅ Foydalanuvchiga xabar yuborildi.")
 
-# Webhook setup
+# Webhook
 async def on_startup(dp):
     await bot.set_webhook(WEBHOOK_URL_FULL)
 
