@@ -14,36 +14,35 @@ from aiogram.types import (
 from aiogram.utils.executor import start_webhook
 from flask import Flask
 
-# .env fayldan yuklash
+# .env yuklash
 load_dotenv()
-
 API_TOKEN = os.getenv("API_TOKEN")
 if not API_TOKEN:
     raise ValueError("API_TOKEN .env faylda topilmadi!")
 
 admins_str = os.getenv("ADMIN_IDS", "")
 ADMIN_IDS = [int(admin.strip()) for admin in admins_str.split(",") if admin.strip()]
-
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 if not WEBHOOK_URL:
     raise ValueError("WEBHOOK_URL .env faylda topilmadi!")
-
 PORT = int(os.getenv("PORT", 8080))
 
-# Flask va aiogram sozlash
+# Flask va Aiogram
 logging.basicConfig(level=logging.INFO)
 app = Flask(__name__)
 bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 
-# Webhook sozlamalar
 WEBHOOK_PATH = f"/webhook/{API_TOKEN}"
 WEBHOOK_URL_FULL = WEBHOOK_URL + WEBHOOK_PATH
 WEBAPP_HOST = "0.0.0.0"
 WEBAPP_PORT = PORT
 
-# Bot holatlari
+# Global dict foydalanuvchining regionini saqlash uchun
+user_regions = {}
+
+# Holatlar
 class OrderBook(StatesGroup):
     phone = State()
     fullname = State()
@@ -61,7 +60,6 @@ region_kb = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
 for r in regions:
     region_kb.add(KeyboardButton(r))
 
-# SPAM filtr
 SPAM_WORDS = ["1xbet", "aviator", "kazino", "stavka", "https://", "http://", "pul ishlash"]
 
 @dp.message_handler(lambda msg: any(word in msg.text.lower() for word in SPAM_WORDS), content_types=types.ContentType.TEXT)
@@ -69,7 +67,7 @@ async def block_spam(message: types.Message):
     await message.reply("🚫 Reklama taqiqlangan!")
     await message.delete()
 
-# /start
+# Start
 @dp.message_handler(commands=['start'])
 async def start(message: types.Message):
     await message.answer("📚 Kitob botiga xush kelibsiz!", reply_markup=start_menu)
@@ -95,7 +93,9 @@ async def receive_fullname(message: types.Message, state: FSMContext):
 async def receive_region(message: types.Message, state: FSMContext):
     if message.text not in regions:
         return await message.answer("❗️ Ro‘yxatdan tanlang.")
+    
     await state.update_data(region=message.text)
+    user_regions[message.from_user.id] = message.text  # saqlaymiz
 
     await message.answer(
         "💳 To‘lov ma'lumotlari:\n\n"
@@ -107,7 +107,6 @@ async def receive_region(message: types.Message, state: FSMContext):
     )
     await OrderBook.payment.set()
 
-# Inline tugmalar
 def confirm_buttons(user_id: int):
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton("✅ Tasdiqlansin", callback_data=f"action:confirm:{user_id}"),
@@ -141,7 +140,7 @@ async def receive_payment(message: types.Message, state: FSMContext):
     if region == "Namangan":
         await message.answer(
             "✅ Chekingiz qabul qilindi. 24 soat ichida adminlarimiz tomonidan tekshirib chiqiladi.\n\n"
-            "Sotib olishni istasangiz /start tugmasini bosing.",
+            "📣 Yana sotib olishni istasangiz pastdagi /start tugmasini bosing.",
             reply_markup=restart_menu
         )
     else:
@@ -169,9 +168,9 @@ async def handle_admin_response(callback_query: CallbackQuery):
     if action == "confirm":
         await bot.send_message(chat_id=user_id, text="✅ Chekingiz muvaffaqiyatli tekshirildi. Tez orada yetkazib beramiz!")
 
-        # Namangan uchun qo‘shimcha ma’lumot
-        user_data = await dp.storage.get_data(chat=callback_query.from_user.id, user=user_id)
-        if user_data.get("region") == "Namangan":
+        # Region bo‘yicha tekshirish
+        region = user_regions.get(user_id)
+        if region == "Namangan":
             await bot.send_location(chat_id=user_id, latitude=41.00822673051774, longitude=71.64066054734141)
 
             photo_path = os.path.join("assets", "vinder_photo.jpg")
